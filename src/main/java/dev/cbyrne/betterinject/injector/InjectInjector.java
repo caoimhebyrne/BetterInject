@@ -2,7 +2,7 @@ package dev.cbyrne.betterinject.injector;
 
 import dev.cbyrne.betterinject.annotations.Arg;
 import dev.cbyrne.betterinject.annotations.Local;
-import dev.cbyrne.betterinject.utils.CallbackInfoReturnableUtils;
+import dev.cbyrne.betterinject.helpers.CallbackInfoHelper;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
@@ -14,7 +14,6 @@ import org.spongepowered.asm.mixin.injection.struct.InjectionInfo;
 import org.spongepowered.asm.mixin.injection.struct.InjectionNodes.InjectionNode;
 import org.spongepowered.asm.mixin.injection.struct.Target;
 import org.spongepowered.asm.util.Annotations;
-import org.spongepowered.asm.util.Constants;
 
 import java.util.Arrays;
 import java.util.List;
@@ -23,17 +22,21 @@ import static org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscrimi
 
 public class InjectInjector extends Injector {
     private final boolean isCancellable;
-    private final boolean shouldGenerateCallbackInfo;
     private final List<Type> callbackArguments;
+
+    private final CallbackInfoHelper callbackInfoHelper;
 
     public InjectInjector(InjectionInfo info, boolean isCancellable) {
         super(info, "@InjectWithArgs");
 
         this.isCancellable = isCancellable;
         this.callbackArguments = Arrays.asList(methodArgs);
-        this.shouldGenerateCallbackInfo =
+
+        boolean shouldGenerateCallbackInfo =
             this.callbackArguments.contains(Type.getType(CallbackInfo.class)) ||
-            this.callbackArguments.contains(Type.getType(CallbackInfoReturnable.class));
+                this.callbackArguments.contains(Type.getType(CallbackInfoReturnable.class));
+
+        this.callbackInfoHelper = new CallbackInfoHelper(shouldGenerateCallbackInfo);
     }
 
     /**
@@ -49,29 +52,25 @@ public class InjectInjector extends Injector {
     private void injectInvokeCallback(Target target, InjectionNode injectionNode) {
         InsnList instructions = new InsnList();
 
-        int callbackInfoIndex = this.generateCallbackInfo(instructions, target);
+        // CallbackInfo info = new CallbackInfo(...);
+        this.callbackInfoHelper.generateCallbackInfo(instructions, target, isCancellable);
 
         // Load the arguments that are desired from the handler
-        this.pushDesiredArguments(instructions, target, injectionNode, callbackInfoIndex);
+        this.pushDesiredArguments(instructions, target, injectionNode);
 
         // Add a method call to the handler to the list
         this.invokeHandler(instructions);
 
         // Wrap the handler invocation in an if(callbackInfo.isCancelled()) check
         if (isCancellable) {
-            this.wrapInCancellationCheck(instructions, target, callbackInfoIndex);
+            this.callbackInfoHelper.wrapInCancellationCheck(instructions, target);
         }
 
         // Add our instructions before the targeted node
         target.insns.insertBefore(injectionNode.getCurrentTarget(), instructions);
     }
 
-    private void pushDesiredArguments(
-        InsnList instructions,
-        Target target,
-        InjectionNode injectionNode,
-        int callbackInfoIndex
-    ) {
+    private void pushDesiredArguments(InsnList instructions, Target target, InjectionNode injectionNode) {
         // Load `this` if not static
         if (!this.isStatic) {
             instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
@@ -84,7 +83,7 @@ public class InjectInjector extends Injector {
 
         // Convert targetArguments to a List, so we can use `indexOf`
         List<Type> targetArguments = Arrays.asList(target.arguments);
-        int amountOfArguments = this.callbackArguments.size() - (this.shouldGenerateCallbackInfo ? 1 : 0);
+        int amountOfArguments = this.callbackArguments.size() - (callbackInfoHelper.isCallbackInfoNeeded() ? 1 : 0);
 
         for (int i = 0; i < amountOfArguments; i++) {
             // We want to get the first argument from the target that matches the current callback argument's type
@@ -105,9 +104,7 @@ public class InjectInjector extends Injector {
             }
         }
 
-        if (this.shouldGenerateCallbackInfo) {
-            instructions.add(new VarInsnNode(Opcodes.ALOAD, callbackInfoIndex));
-        }
+        this.callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
     }
 
     /**
@@ -132,88 +129,5 @@ public class InjectInjector extends Injector {
 
         int local = discriminator.findLocal(context);
         instructions.add(new VarInsnNode(desiredType.getOpcode(Opcodes.ILOAD), local));
-    }
-
-    private int generateCallbackInfo(InsnList instructions, Target target) {
-        if (!this.shouldGenerateCallbackInfo) {
-            return -1;
-        }
-
-        int index = target.allocateLocal();
-        String callbackInfoClass = CallbackInfo.getCallInfoClassName(target.returnType);
-
-        // new CallbackInfo
-        instructions.add(new TypeInsnNode(Opcodes.NEW, callbackInfoClass));
-        instructions.add(new InsnNode(Opcodes.DUP));
-        // "{target.method.name}"
-        instructions.add(new LdcInsnNode(target.method.name));
-        // isCancellable
-        instructions.add(new InsnNode(isCancellable ? Opcodes.ICONST_1 : Opcodes.ICONST_0));
-        // () <- new CallbackInfo("{target.method.name}", isCancellable)
-        instructions.add(
-            new MethodInsnNode(
-                Opcodes.INVOKESPECIAL,
-                callbackInfoClass,
-                Constants.CTOR,
-                "(Ljava/lang/String;Z)V",
-                false
-            )
-        );
-
-        // index: callbackInfo(index)
-        target.addLocalVariable(index, "callbackInfo" + index, "L" + callbackInfoClass + ";");
-
-        // Store new CallbackInfo(...) in the allocated index
-        instructions.add(new VarInsnNode(Opcodes.ASTORE, index));
-        return index;
-    }
-
-    private void wrapInCancellationCheck(InsnList instructions, Target target, int callbackInfoIndex) {
-        String callbackInfoClass = CallbackInfo.getCallInfoClassName(target.returnType);
-
-        // Load our instance of callback info
-        instructions.add(new VarInsnNode(Opcodes.ALOAD, callbackInfoIndex));
-
-        // callbackInfo.isCancelled()
-        instructions.add(new MethodInsnNode(
-            Opcodes.INVOKEVIRTUAL,
-            callbackInfoClass,
-            "isCancelled",
-            "()Z",
-            false)
-        );
-
-        // if (!callbackInfo.isCancelled) {
-        //     ...
-        // }
-        LabelNode ifNotCancelled = new LabelNode();
-        instructions.add(new JumpInsnNode(Opcodes.IFEQ, ifNotCancelled));
-
-        if (target.returnType == Type.VOID_TYPE) {
-            // return;
-            instructions.add(new InsnNode(Opcodes.RETURN));
-        } else {
-            instructions.add(new VarInsnNode(Opcodes.ALOAD, callbackInfoIndex));
-
-            // CallbackInfoReturnable.getReturnValue{X}()
-            instructions.add(new MethodInsnNode(
-                Opcodes.INVOKEVIRTUAL,
-                callbackInfoClass,
-                CallbackInfoReturnableUtils.returnFunctionName(target.returnType),
-                CallbackInfoReturnableUtils.returnFunctionDescriptor(target.returnType),
-                false
-            ));
-
-            // If the return type is an object, method, etc.
-            if (target.returnType.getSort() >= Type.ARRAY) {
-                // We need to cast the Object to the return type
-                instructions.add(new TypeInsnNode(Opcodes.CHECKCAST, target.returnType.getInternalName()));
-            }
-
-            // return
-            instructions.add(new InsnNode(target.returnType.getOpcode(Opcodes.IRETURN)));
-        }
-
-        instructions.add(ifNotCancelled);
     }
 }
