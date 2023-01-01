@@ -3,6 +3,7 @@ package dev.cbyrne.betterinject.injector;
 import dev.cbyrne.betterinject.annotations.Arg;
 import dev.cbyrne.betterinject.annotations.Local;
 import dev.cbyrne.betterinject.helpers.CallbackInfoHelper;
+import dev.cbyrne.betterinject.injector.strategy.ArgumentHandlingStrategy;
 import dev.cbyrne.betterinject.utils.CallbackInfoUtils;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -14,6 +15,7 @@ import org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscriminator;
 import org.spongepowered.asm.mixin.injection.struct.InjectionInfo;
 import org.spongepowered.asm.mixin.injection.struct.InjectionNodes.InjectionNode;
 import org.spongepowered.asm.mixin.injection.struct.Target;
+import org.spongepowered.asm.mixin.injection.throwables.InjectionError;
 import org.spongepowered.asm.util.Annotations;
 
 import java.util.Arrays;
@@ -24,12 +26,14 @@ import static org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscrimi
 public class InjectInjector extends Injector {
     private final boolean isCancellable;
     private final CallbackInfoHelper callbackInfoHelper;
+    private final ArgumentHandlingStrategy argumentStrategy;
 
     public InjectInjector(InjectionInfo info, boolean isCancellable) {
         super(info, "@InjectWithArgs");
 
         this.isCancellable = isCancellable;
         this.callbackInfoHelper = new CallbackInfoHelper(this.isCallbackInfoNeeded());
+        this.argumentStrategy = ArgumentHandlingStrategy.fromMethod(this.methodNode, this.methodArgs);
     }
 
     /**
@@ -38,8 +42,50 @@ public class InjectInjector extends Injector {
      */
     @Override
     protected void inject(Target target, InjectionNode node) {
+        if (argumentStrategy == ArgumentHandlingStrategy.STRICT) {
+            // We are on strict mode, let's check if all the arguments from the target are present on the callback.
+            this.checkArgumentsStrict(target);
+        }
+
         this.checkTargetModifiers(target, true);
         this.injectInvokeCallback(target, node);
+    }
+
+    /**
+     * Ensures that all the arguments from the target are on the handler, in the same order.
+     * This is called when the Injector is in {@link ArgumentHandlingStrategy#STRICT}.
+     *
+     * @see #inject(Target, InjectionNode)
+     */
+    private void checkArgumentsStrict(Target target) {
+        // There are no arguments to check
+        if (target.arguments.length == 0) {
+            return;
+        }
+
+        // The target has more than the handler
+        if (target.arguments.length > methodArgs.length) {
+            strictModeArgumentCheckError(target);
+        }
+
+        for (int i = 0; i < target.arguments.length; i++) {
+            Type targetArgument = target.arguments[i];
+            Type handlerArgument = methodArgs[i];
+
+            if (!targetArgument.equals(handlerArgument)) {
+                strictModeArgumentCheckError(target);
+            }
+        }
+    }
+
+    private void strictModeArgumentCheckError(Target target) {
+        String message = "Arguments of handler " + methodNode.name + " do not match target " + target.method.name;
+        Injector.logger.error(
+            "Injection failure, ArgumentHandlingStrategy.STRICT mode has been enabled due to none of the handler's arguments being annotated with @Arg.",
+            message
+        );
+
+        throw new InjectionError(message);
     }
 
     private void injectInvokeCallback(Target target, InjectionNode injectionNode) {
