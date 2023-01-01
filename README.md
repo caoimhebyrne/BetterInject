@@ -21,7 +21,8 @@ BetterInject's `@Inject` solves this problem, it:
 You can get BetterInject from [JitPack](https://jitpack.io).
 
 ```groovy
-implementation("com.github.cbyrneee:BetterInject:0.1.0") 
+implementation("com.github.cbyrneee:BetterInject:0.1.0")
+annotationProcessor("com.github.cbyrneee:BetterInject:0.1.0")
 ```
 
 For how to initialize BetterInject, check the [Initializing](#initializing) section.
