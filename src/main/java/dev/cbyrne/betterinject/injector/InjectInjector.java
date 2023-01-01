@@ -3,11 +3,12 @@ package dev.cbyrne.betterinject.injector;
 import dev.cbyrne.betterinject.annotations.Arg;
 import dev.cbyrne.betterinject.annotations.Local;
 import dev.cbyrne.betterinject.helpers.CallbackInfoHelper;
+import dev.cbyrne.betterinject.utils.CallbackInfoUtils;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
-import org.objectweb.asm.tree.*;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.objectweb.asm.tree.AnnotationNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.VarInsnNode;
 import org.spongepowered.asm.mixin.injection.code.Injector;
 import org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscriminator;
 import org.spongepowered.asm.mixin.injection.struct.InjectionInfo;
@@ -22,21 +23,13 @@ import static org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscrimi
 
 public class InjectInjector extends Injector {
     private final boolean isCancellable;
-    private final List<Type> callbackArguments;
-
     private final CallbackInfoHelper callbackInfoHelper;
 
     public InjectInjector(InjectionInfo info, boolean isCancellable) {
         super(info, "@InjectWithArgs");
 
         this.isCancellable = isCancellable;
-        this.callbackArguments = Arrays.asList(methodArgs);
-
-        boolean shouldGenerateCallbackInfo =
-            this.callbackArguments.contains(Type.getType(CallbackInfo.class)) ||
-                this.callbackArguments.contains(Type.getType(CallbackInfoReturnable.class));
-
-        this.callbackInfoHelper = new CallbackInfoHelper(shouldGenerateCallbackInfo);
+        this.callbackInfoHelper = new CallbackInfoHelper(this.isCallbackInfoNeeded());
     }
 
     /**
@@ -77,18 +70,18 @@ public class InjectInjector extends Injector {
         }
 
         // Let's only push arguments if there's any on the handler method
-        if (this.callbackArguments.size() == 0) {
+        if (this.methodArgs.length == 0) {
             return;
         }
 
         // Convert targetArguments to a List, so we can use `indexOf`
         List<Type> targetArguments = Arrays.asList(target.arguments);
-        int amountOfArguments = this.callbackArguments.size() - (callbackInfoHelper.isCallbackInfoNeeded() ? 1 : 0);
+        int amountOfArguments = this.methodArgs.length - (callbackInfoHelper.isCallbackInfoNeeded() ? 1 : 0);
 
         for (int i = 0; i < amountOfArguments; i++) {
             // We want to get the first argument from the target that matches the current callback argument's type
-            Type argument = this.callbackArguments.get(i);
-            int targetArgumentIndex = targetArguments.indexOf(argument);
+            Type argumentType = this.methodArgs[i];
+            int targetArgumentIndex = targetArguments.indexOf(argumentType);
 
             // Check if the index was overridden by @Arg or @Local
             AnnotationNode argNode = Annotations.getVisibleParameter(methodNode, Arg.class, i);
@@ -98,9 +91,21 @@ public class InjectInjector extends Injector {
             boolean isArgumentNode = argNode != null;
 
             if (annotationNode != null) {
-                this.pushLocalFromAnnotation(instructions, target, injectionNode, annotationNode, argument, isArgumentNode);
+                this.pushLocalFromAnnotation(
+                    instructions,
+                    target,
+                    injectionNode,
+                    annotationNode,
+                    argumentType,
+                    isArgumentNode
+                );
             } else {
-                instructions.add(new VarInsnNode(argument.getOpcode(Opcodes.ILOAD), target.getArgIndices()[targetArgumentIndex]));
+                instructions.add(
+                    new VarInsnNode(
+                        argumentType.getOpcode(Opcodes.ILOAD),
+                        target.getArgIndices()[targetArgumentIndex]
+                    )
+                );
             }
         }
 
@@ -129,5 +134,19 @@ public class InjectInjector extends Injector {
 
         int local = discriminator.findLocal(context);
         instructions.add(new VarInsnNode(desiredType.getOpcode(Opcodes.ILOAD), local));
+    }
+
+    /**
+     * Loops over each argument in the handler method, and checks if any of them are CallbackInfo(Returnable).
+     */
+    private boolean isCallbackInfoNeeded() {
+        for (Type argumentType : methodArgs) {
+            String desc = argumentType.getDescriptor();
+            if (desc.equals(CallbackInfoUtils.DESCRIPTOR) || desc.equals(CallbackInfoUtils.RETURNABLE_DESCRIPTOR)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

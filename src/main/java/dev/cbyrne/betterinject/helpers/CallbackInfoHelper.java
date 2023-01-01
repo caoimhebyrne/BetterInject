@@ -1,6 +1,6 @@
 package dev.cbyrne.betterinject.helpers;
 
-import dev.cbyrne.betterinject.utils.CallbackInfoReturnableUtils;
+import dev.cbyrne.betterinject.utils.CallbackInfoUtils;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
@@ -142,8 +142,8 @@ public class CallbackInfoHelper {
             instructions.add(new MethodInsnNode(
                 Opcodes.INVOKEVIRTUAL,
                 callbackInfoClass,
-                CallbackInfoReturnableUtils.returnFunctionName(target.returnType),
-                CallbackInfoReturnableUtils.returnFunctionDescriptor(target.returnType),
+                CallbackInfoUtils.returnFunctionName(target.returnType),
+                CallbackInfoUtils.returnFunctionDescriptor(target.returnType),
                 false
             ));
 

@@ -1,9 +1,14 @@
 package dev.cbyrne.betterinject.utils;
 
 import org.objectweb.asm.Type;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.util.Constants;
 
-public class CallbackInfoReturnableUtils {
+public class CallbackInfoUtils {
+    public static final String DESCRIPTOR = String.format("L%s;", CallbackInfo.class.getName().replace(".", "/"));
+    public static final String RETURNABLE_DESCRIPTOR = String.format("L%s;", CallbackInfoReturnable.class.getName().replace(".", "/"));
+
     public static String returnFunctionName(Type returnType) {
         if (returnType.getSort() == Type.OBJECT || returnType.getSort() == Type.ARRAY) {
             return "getReturnValue";
