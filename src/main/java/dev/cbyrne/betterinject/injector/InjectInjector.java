@@ -76,12 +76,16 @@ public class InjectInjector extends Injector {
 
         // Convert targetArguments to a List, so we can use `indexOf`
         List<Type> targetArguments = Arrays.asList(target.arguments);
-        int amountOfArguments = this.methodArgs.length - (callbackInfoHelper.isCallbackInfoNeeded() ? 1 : 0);
 
-        for (int i = 0; i < amountOfArguments; i++) {
+        for (int i = 0; i < this.methodArgs.length; i++) {
             // We want to get the first argument from the target that matches the current callback argument's type
             Type argumentType = this.methodArgs[i];
-            int targetArgumentIndex = targetArguments.indexOf(argumentType);
+
+            // If the descriptor is CallbackInfo, we need to push it
+            if (CallbackInfoUtils.typeIsCallbackInfo(argumentType)) {
+                this.callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
+                continue;
+            }
 
             // Check if the index was overridden by @Arg or @Local
             AnnotationNode argNode = Annotations.getVisibleParameter(methodNode, Arg.class, i);
@@ -91,6 +95,7 @@ public class InjectInjector extends Injector {
             boolean isArgumentNode = argNode != null;
 
             if (annotationNode != null) {
+                // Push the local from the annotation's data, i.e. find a local based on its ordinal
                 this.pushLocalFromAnnotation(
                     instructions,
                     target,
@@ -100,6 +105,10 @@ public class InjectInjector extends Injector {
                     isArgumentNode
                 );
             } else {
+                // There's no annotation, we should just get the first type from the target's arguments that matches
+                // the handler's argument type
+                int targetArgumentIndex = targetArguments.indexOf(argumentType);
+
                 instructions.add(
                     new VarInsnNode(
                         argumentType.getOpcode(Opcodes.ILOAD),
@@ -108,8 +117,6 @@ public class InjectInjector extends Injector {
                 );
             }
         }
-
-        this.callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
     }
 
     /**
@@ -141,8 +148,7 @@ public class InjectInjector extends Injector {
      */
     private boolean isCallbackInfoNeeded() {
         for (Type argumentType : methodArgs) {
-            String desc = argumentType.getDescriptor();
-            if (desc.equals(CallbackInfoUtils.DESCRIPTOR) || desc.equals(CallbackInfoUtils.RETURNABLE_DESCRIPTOR)) {
+            if (CallbackInfoUtils.typeIsCallbackInfo(argumentType)) {
                 return true;
             }
         }
