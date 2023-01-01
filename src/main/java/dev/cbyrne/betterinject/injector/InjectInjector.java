@@ -42,7 +42,7 @@ public class InjectInjector extends Injector {
      */
     @Override
     protected void inject(Target target, InjectionNode node) {
-        this.checkTargetModifiers(target, false);
+        this.checkTargetModifiers(target, true);
         this.injectInvokeCallback(target, node);
     }
 
