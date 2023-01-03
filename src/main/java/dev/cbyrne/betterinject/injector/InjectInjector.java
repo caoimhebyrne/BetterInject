@@ -25,14 +25,12 @@ import static org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscrimi
 
 public class InjectInjector extends Injector {
     private final boolean isCancellable;
-    private final CallbackInfoHelper callbackInfoHelper;
     private final ArgumentHandlingStrategy argumentStrategy;
 
     public InjectInjector(InjectionInfo info, boolean isCancellable) {
         super(info, "@InjectWithArgs");
 
         this.isCancellable = isCancellable;
-        this.callbackInfoHelper = new CallbackInfoHelper(this.isCallbackInfoNeeded());
         this.argumentStrategy = ArgumentHandlingStrategy.fromMethod(this.methodNode, this.methodArgs);
     }
 
@@ -42,6 +40,9 @@ public class InjectInjector extends Injector {
      */
     @Override
     protected void inject(Target target, InjectionNode node) {
+        CallbackInfoHelper callbackInfoHelper = new CallbackInfoHelper(this.isCallbackInfoNeeded());
+        node.decorate("callbackInfoHelper", callbackInfoHelper);
+
         if (argumentStrategy == ArgumentHandlingStrategy.STRICT) {
             // We are on strict mode, let's check if all the arguments from the target are present on the callback.
             this.checkArgumentsStrict(target);
@@ -88,28 +89,34 @@ public class InjectInjector extends Injector {
         throw new InjectionError(message);
     }
 
-    private void injectInvokeCallback(Target target, InjectionNode injectionNode) {
+    private void injectInvokeCallback(Target target, InjectionNode node) {
         InsnList instructions = new InsnList();
+        CallbackInfoHelper callbackInfoHelper = node.getDecoration("callbackInfoHelper");
 
         // CallbackInfo info = new CallbackInfo(...);
-        this.callbackInfoHelper.generateCallbackInfo(instructions, target, isCancellable);
+        callbackInfoHelper.generateCallbackInfo(instructions, target, isCancellable);
 
         // Load the arguments that are desired from the handler
-        this.pushDesiredArguments(instructions, target, injectionNode);
+        this.pushDesiredArguments(instructions, target, node, callbackInfoHelper);
 
         // Add a method call to the handler to the list
         this.invokeHandler(instructions);
 
         // Wrap the handler invocation in an if(callbackInfo.isCancelled()) check
         if (isCancellable) {
-            this.callbackInfoHelper.wrapInCancellationCheck(instructions, target);
+            callbackInfoHelper.wrapInCancellationCheck(instructions, target);
         }
 
         // Add our instructions before the targeted node
-        target.insns.insertBefore(injectionNode.getCurrentTarget(), instructions);
+        target.insns.insertBefore(node.getCurrentTarget(), instructions);
     }
 
-    private void pushDesiredArguments(InsnList instructions, Target target, InjectionNode injectionNode) {
+    private void pushDesiredArguments(
+        InsnList instructions,
+        Target target,
+        InjectionNode node,
+        CallbackInfoHelper callbackInfoHelper
+    ) {
         // Load `this` if not static
         if (!this.isStatic) {
             instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
@@ -129,7 +136,7 @@ public class InjectInjector extends Injector {
 
             // If the descriptor is CallbackInfo, we need to push it
             if (CallbackInfoUtils.typeIsCallbackInfo(argumentType)) {
-                this.callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
+                callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
                 continue;
             }
 
@@ -145,7 +152,7 @@ public class InjectInjector extends Injector {
                 this.pushLocalFromAnnotation(
                     instructions,
                     target,
-                    injectionNode,
+                    node,
                     annotationNode,
                     argumentType,
                     isArgumentNode
