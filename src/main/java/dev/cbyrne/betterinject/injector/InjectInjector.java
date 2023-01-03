@@ -33,7 +33,7 @@ public class InjectInjector extends Injector {
     private final ArgumentHandlingStrategy argumentStrategy;
 
     public InjectInjector(InjectionInfo info, boolean isCancellable, boolean print) {
-        super(info, "@InjectWithArgs");
+        super(info, "@Inject");
 
         this.isCancellable = isCancellable;
         this.print = print;

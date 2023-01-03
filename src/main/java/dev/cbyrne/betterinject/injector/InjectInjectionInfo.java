@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.transformer.MixinTargetContext;
 import org.spongepowered.asm.util.Annotations;
 
 @InjectionInfo.AnnotationType(Inject.class)
-@InjectionInfo.HandlerPrefix("injectWithArgs")
+@InjectionInfo.HandlerPrefix("inject")
 public class InjectInjectionInfo extends InjectionInfo{
     public InjectInjectionInfo(MixinTargetContext mixin, MethodNode method, AnnotationNode annotation) {
         super(mixin, method, annotation);
