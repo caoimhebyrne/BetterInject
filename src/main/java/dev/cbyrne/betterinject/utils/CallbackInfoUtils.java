@@ -8,6 +8,19 @@ import org.spongepowered.asm.util.Constants;
 public class CallbackInfoUtils {
     public static final String DESCRIPTOR = String.format("L%s;", CallbackInfo.class.getName().replace(".", "/"));
     public static final String RETURNABLE_DESCRIPTOR = String.format("L%s;", CallbackInfoReturnable.class.getName().replace(".", "/"));
+    public static final String CTOR = "(Ljava/lang/String;Z)V";
+
+    public static String constructorDescriptor(Type returnType) {
+        if (returnType.equals(Type.VOID_TYPE)) {
+            return CTOR;
+        }
+
+        if (returnType.getSort() == Type.OBJECT || returnType.getSort() == Type.ARRAY) {
+            return String.format("(%sZ%s)V", Constants.STRING_DESC, Constants.OBJECT_DESC);
+        }
+
+        return String.format("(%sZ%s)V", Constants.STRING_DESC, returnType.getDescriptor());
+    }
 
     public static boolean typeIsCallbackInfo(Type type) {
         String desc = type.getDescriptor();

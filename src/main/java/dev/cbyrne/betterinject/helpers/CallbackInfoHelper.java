@@ -22,8 +22,14 @@ public class CallbackInfoHelper {
      */
     private final boolean isCallbackInfoNeeded;
 
-    public CallbackInfoHelper(boolean isCallbackInfoNeeded) {
+    /**
+     * If the next instruction is a return instruction or not
+     */
+    private final boolean nextInsnIsReturn;
+
+    public CallbackInfoHelper(boolean isCallbackInfoNeeded, boolean nextInsnIsReturn) {
         this.isCallbackInfoNeeded = isCallbackInfoNeeded;
+        this.nextInsnIsReturn = nextInsnIsReturn;
     }
 
     /**
@@ -35,6 +41,7 @@ public class CallbackInfoHelper {
 
     /**
      * If the callback info was generated
+     *
      * @see #generateCallbackInfo(InsnList, Target, boolean)
      */
     public boolean didGenerateCallbackInfo() {
@@ -53,6 +60,15 @@ public class CallbackInfoHelper {
 
         this.callbackInfoIndex = target.allocateLocal();
         String callbackInfoClass = CallbackInfo.getCallInfoClassName(target.returnType);
+        String callbackInfoCtorDesc = CallbackInfoUtils.CTOR;
+
+        // We need to store the return type
+        int returnTypeLocal = target.allocateLocal();
+        if (this.nextInsnIsReturn && !target.returnType.equals(Type.VOID_TYPE)) {
+            int dupCode = target.returnType.getSize() == 1 ? Opcodes.DUP : Opcodes.DUP2;
+            instructions.add(new InsnNode(dupCode));
+            instructions.add(new VarInsnNode(target.returnType.getOpcode(Opcodes.ISTORE), returnTypeLocal));
+        }
 
         // new CallbackInfo
         instructions.add(new TypeInsnNode(Opcodes.NEW, callbackInfoClass));
@@ -61,13 +77,18 @@ public class CallbackInfoHelper {
         instructions.add(new LdcInsnNode(target.method.name));
         // isCancellable
         instructions.add(new InsnNode(isMethodCancellable ? Opcodes.ICONST_1 : Opcodes.ICONST_0));
-        // () <- new CallbackInfo("{target.method.name}", isCancellable)
+        if (this.nextInsnIsReturn && !target.returnType.equals(Type.VOID_TYPE)) {
+            // We need to load a local of the target's return type to pass the return type to the CallbackInfoReturnable ctor
+            instructions.add(new VarInsnNode(target.returnType.getOpcode(Opcodes.ILOAD), returnTypeLocal));
+            callbackInfoCtorDesc = CallbackInfoUtils.constructorDescriptor(target.returnType);
+        }
+        // () <- new CallbackInfo("{target.method.name}", isCancellable, ...)
         instructions.add(
             new MethodInsnNode(
                 Opcodes.INVOKESPECIAL,
                 callbackInfoClass,
                 Constants.CTOR,
-                "(Ljava/lang/String;Z)V",
+                callbackInfoCtorDesc,
                 false
             )
         );
@@ -136,7 +157,7 @@ public class CallbackInfoHelper {
             // return;
             instructions.add(new InsnNode(Opcodes.RETURN));
         } else {
-            instructions.add(new VarInsnNode(Opcodes.ALOAD, callbackInfoIndex));
+            instructions.add(new VarInsnNode(Opcodes.ALOAD, this.callbackInfoIndex));
 
             // CallbackInfoReturnable.getReturnValue{X}()
             instructions.add(new MethodInsnNode(

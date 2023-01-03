@@ -40,7 +40,12 @@ public class InjectInjector extends Injector {
      */
     @Override
     protected void inject(Target target, InjectionNode node) {
-        CallbackInfoHelper callbackInfoHelper = new CallbackInfoHelper(this.isCallbackInfoNeeded());
+        int opcode = node.getCurrentTarget().getOpcode();
+        CallbackInfoHelper callbackInfoHelper = new CallbackInfoHelper(
+            this.isCallbackInfoNeeded(),
+            node.getCurrentTarget() instanceof InsnNode && opcode >= Opcodes.IRETURN && opcode < Opcodes.RETURN
+        );
+
         node.decorate("callbackInfoHelper", callbackInfoHelper);
 
         if (argumentStrategy == ArgumentHandlingStrategy.STRICT) {
