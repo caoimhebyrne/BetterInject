@@ -18,6 +18,8 @@ public class InjectInjectionInfo extends InjectionInfo{
     @Override
     protected Injector parseInjector(AnnotationNode injectAnnotation) {
         boolean isCancellable = Annotations.getValue(injectAnnotation, "cancellable", Boolean.FALSE);
-        return new InjectInjector(this, isCancellable);
+        boolean print = Annotations.getValue(injectAnnotation, "print", Boolean.FALSE);
+
+        return new InjectInjector(this, isCancellable, print);
     }
 }

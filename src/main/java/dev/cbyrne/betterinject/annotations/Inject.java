@@ -26,4 +26,6 @@ public @interface Inject {
     int expect() default 1;
 
     int allow() default -1;
+
+    boolean print() default false;
 }

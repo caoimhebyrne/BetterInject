@@ -9,6 +9,7 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
 import org.objectweb.asm.tree.VarInsnNode;
 import org.spongepowered.asm.mixin.injection.code.Injector;
 import org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscriminator;
@@ -17,7 +18,9 @@ import org.spongepowered.asm.mixin.injection.struct.InjectionNodes.InjectionNode
 import org.spongepowered.asm.mixin.injection.struct.Target;
 import org.spongepowered.asm.mixin.injection.throwables.InjectionError;
 import org.spongepowered.asm.util.Annotations;
+import org.spongepowered.asm.util.Bytecode;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -25,12 +28,14 @@ import static org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscrimi
 
 public class InjectInjector extends Injector {
     private final boolean isCancellable;
+    private final boolean print;
     private final ArgumentHandlingStrategy argumentStrategy;
 
-    public InjectInjector(InjectionInfo info, boolean isCancellable) {
+    public InjectInjector(InjectionInfo info, boolean isCancellable, boolean print) {
         super(info, "@InjectWithArgs");
 
         this.isCancellable = isCancellable;
+        this.print = print;
         this.argumentStrategy = ArgumentHandlingStrategy.fromMethod(this.methodNode, this.methodArgs);
     }
 
@@ -55,6 +60,10 @@ public class InjectInjector extends Injector {
 
         this.checkTargetModifiers(target, true);
         this.injectInvokeCallback(target, node);
+
+        if (print) {
+            Bytecode.printMethod(target.method);
+        }
     }
 
     /**
