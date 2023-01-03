@@ -29,6 +29,7 @@ import static org.spongepowered.asm.mixin.injection.modify.LocalVariableDiscrimi
 public class InjectInjector extends Injector {
     private final boolean isCancellable;
     private final boolean print;
+    private CallbackInfoHelper callbackInfoHelper = null;
     private final ArgumentHandlingStrategy argumentStrategy;
 
     public InjectInjector(InjectionInfo info, boolean isCancellable, boolean print) {
@@ -46,12 +47,10 @@ public class InjectInjector extends Injector {
     @Override
     protected void inject(Target target, InjectionNode node) {
         int opcode = node.getCurrentTarget().getOpcode();
-        CallbackInfoHelper callbackInfoHelper = new CallbackInfoHelper(
+        this.callbackInfoHelper = new CallbackInfoHelper(
             this.isCallbackInfoNeeded(),
             node.getCurrentTarget() instanceof InsnNode && opcode >= Opcodes.IRETURN && opcode < Opcodes.RETURN
         );
-
-        node.decorate("callbackInfoHelper", callbackInfoHelper);
 
         if (argumentStrategy == ArgumentHandlingStrategy.STRICT) {
             // We are on strict mode, let's check if all the arguments from the target are present on the callback.
@@ -105,32 +104,26 @@ public class InjectInjector extends Injector {
 
     private void injectInvokeCallback(Target target, InjectionNode node) {
         InsnList instructions = new InsnList();
-        CallbackInfoHelper callbackInfoHelper = node.getDecoration("callbackInfoHelper");
 
         // CallbackInfo info = new CallbackInfo(...);
-        callbackInfoHelper.generateCallbackInfo(instructions, target, isCancellable);
+        this.callbackInfoHelper.generateCallbackInfo(instructions, target, isCancellable);
 
         // Load the arguments that are desired from the handler
-        this.pushDesiredArguments(instructions, target, node, callbackInfoHelper);
+        this.pushDesiredArguments(instructions, target, node);
 
         // Add a method call to the handler to the list
         this.invokeHandler(instructions);
 
         // Wrap the handler invocation in an if(callbackInfo.isCancelled()) check
         if (isCancellable) {
-            callbackInfoHelper.wrapInCancellationCheck(instructions, target);
+            this.callbackInfoHelper.wrapInCancellationCheck(instructions, target);
         }
 
         // Add our instructions before the targeted node
         target.insns.insertBefore(node.getCurrentTarget(), instructions);
     }
 
-    private void pushDesiredArguments(
-        InsnList instructions,
-        Target target,
-        InjectionNode node,
-        CallbackInfoHelper callbackInfoHelper
-    ) {
+    private void pushDesiredArguments(InsnList instructions, Target target, InjectionNode node) {
         // Load `this` if not static
         if (!this.isStatic) {
             instructions.add(new VarInsnNode(Opcodes.ALOAD, 0));
@@ -141,16 +134,13 @@ public class InjectInjector extends Injector {
             return;
         }
 
-        // Convert targetArguments to a List, so we can use `indexOf`
-        List<Type> targetArguments = Arrays.asList(target.arguments);
-
         for (int i = 0; i < this.methodArgs.length; i++) {
             // We want to get the first argument from the target that matches the current callback argument's type
             Type argumentType = this.methodArgs[i];
 
             // If the descriptor is CallbackInfo, we need to push it
             if (CallbackInfoUtils.typeIsCallbackInfo(argumentType)) {
-                callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
+                this.callbackInfoHelper.pushCallbackInfoIfRequired(instructions);
                 continue;
             }
 
@@ -171,17 +161,11 @@ public class InjectInjector extends Injector {
                     argumentType,
                     isArgumentNode
                 );
+            } else if (argumentStrategy == ArgumentHandlingStrategy.STRICT) {
+                // We are in strict mode, arguments should be in order.
+                instructions.add(new VarInsnNode(argumentType.getOpcode(Opcodes.ILOAD), target.getArgIndices()[i]));
             } else {
-                // There's no annotation, we should just get the first type from the target's arguments that matches
-                // the handler's argument type
-                int targetArgumentIndex = targetArguments.indexOf(argumentType);
-
-                instructions.add(
-                    new VarInsnNode(
-                        argumentType.getOpcode(Opcodes.ILOAD),
-                        target.getArgIndices()[targetArgumentIndex]
-                    )
-                );
+                throw new IllegalStateException("Not implemented");
             }
         }
     }
