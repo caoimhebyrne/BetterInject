@@ -3,6 +3,7 @@
 BetterInject provides a new `@Inject` annotation to use with [Mixin](https://github.com/SpongePowered/Mixin/).
 
 With the regular `@Inject`, you need to either:
+
 - Have all method arguments
 - Have no method arguments
 
@@ -30,11 +31,13 @@ For how to initialize BetterInject, check the [Initializing](#initializing) sect
 ## Examples
 
 For these examples, we will be `@Inject`ing into a method with the following signature:
+
 ```java
 public void render(MatrixStack stack, int mouseX, int mouseY, float delta)
 ```
 
 ### Basic hook (no arguments or callback info)
+
 ```java
 @Inject(method = "render", at = @At("HEAD"))
 public void myMod$onRender() {
@@ -43,6 +46,7 @@ public void myMod$onRender() {
 ```
 
 ### Cancelling a method
+
 ```java
 @Inject(method = "render", at = @At("HEAD"), cancellable = true)
 public void myMod$onRender(CallbackInfo ci) {
@@ -57,28 +61,38 @@ public void myMod$onRender(CallbackInfo ci) {
 ### Getting arguments
 
 1. All arguments
+
     ```java
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     public void myMod$onRender(MatrixStack stack, int mouseX, int mouseY, float delta) {
     }
     ```
 
-2. Certain arguments
+2. Single argument
+
+   `@Arg` is required when you are not using all of the arguments provided by the target method. If you don't
+   use `@Arg`, strict mode will be enabled. BetterInject will throw an exception if your handler method's arguments dont
+   match the target method's.
+
     ```java
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
-    public void myMod$onRender(float delta) {
+    public void myMod$onRender(@Arg float delta) {
     
     }
     ```
 
-3. Using `@Arg`
-    > **Note**
-    > Using `@Arg` is only required for getting arguments where the type is in the descriptor more than once
-   
+   > **Warning**
+   > `@Arg` without specifying an ordinal (defaulting at `-1`) assumes that there is only one parameter of that type on the target function. If there is
+   more than one, an exception will be thrown at runtime.
+
+3. Multiple arguments
+
+   Use `@Arg(ordinal=)` to specify the ordinal of the argument that you are targeting.
+
     ```java
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     public void myMod$onRender(
-        MatrixStack stack,
+        @Arg MatrixStack stack,
         // @Arg(ordinal = 0) int mouseX <- If you wanted mouseX
         @Arg(ordinal = 1) int mouseY
     ) {
@@ -87,19 +101,20 @@ public void myMod$onRender(CallbackInfo ci) {
 
 ### Local Capture
 
-Local capture has been made much easier. You can now just apply `@Local(ordinal)` on to an argument in your `@Inject` 
+Local capture has been made much easier. You can now just apply `@Local(ordinal=)` on to an argument in your `@Inject`
 method's signature!
 
 ```java
 @Inject(method = "render", at = @At("RETURN"))
-public void myMod$onRender(@Local String localString) {
+public void myMod$onRender(
+    @Local String localString // Default ordinal of -1 (a.k.a. there is only one String in the local variables of this target)
+) {
     System.out.println("Grabbed local: " + localString);
 }
 ```
 
-> **Note**
-> In the example above, `localString` has a default ordinal of `-1`, meaning that it must be the only local of that type
-> at that specific point of injection.
+> **Warning**
+> `@Local` without an ordinal (defaults at `-1`) behaves just like `@Arg`. If there is less than or more than 1 local variable with the same type as the one you are targetting, an exception will be thrown at runtime.
 
 ### Initializing
 
@@ -117,7 +132,7 @@ public void myMod$onRender(@Local String localString) {
         }
     }
     ```
-  
+
     ```json
     {
       ...
