@@ -29,6 +29,13 @@ java {
     withSourcesJar()
 }
 
+tasks {
+    jar {
+        from("LICENSE")
+            .rename { "${it}_${project.name}" }
+    }
+}
+
 publishing {
     publications {
         create<MavenPublication>("maven") {
