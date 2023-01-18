@@ -46,8 +46,8 @@ The intention of BetterInject is not to overthrow Mixin, or make our own Mixin l
 You can get BetterInject from [JitPack](https://jitpack.io).
 
 ```groovy
-implementation("com.github.cbyrneee:BetterInject:0.1.1")
-annotationProcessor("com.github.cbyrneee:BetterInject:0.1.1")
+implementation("com.github.cbyrneee:BetterInject:0.1.2")
+annotationProcessor("com.github.cbyrneee:BetterInject:0.1.2")
 ```
 
 For how to initialize BetterInject, check the [Initializing in Your Mod](#initializing-in-your-mod) section.
