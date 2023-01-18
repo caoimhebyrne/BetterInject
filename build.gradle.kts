@@ -31,8 +31,9 @@ java {
 
 tasks {
     jar {
-        from("LICENSE")
-            .rename { "${it}_${project.name}" }
+        from("LICENSE") {
+            rename { "${it}_${project.name}" }
+        }
     }
 }
 
