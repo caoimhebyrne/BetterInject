@@ -1,3 +1,7 @@
+## Deprecation Notice
+
+BetterInject is not maintained anymore, I would recommend that you use [MixinExtras](https://github.com/LlamaLad7/MixinExtras), which has [pretty much everything that BetterInject provides](https://github.com/LlamaLad7/MixinExtras/wiki/Local) and much more.
+
 # BetterInject
 
 BetterInject provides a new `@Inject` annotation to use with [Mixin](https://github.com/SpongePowered/Mixin/).
